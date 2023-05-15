@@ -8,6 +8,14 @@ library(randomForest)
 # Set the seed for reproducibility
 set.seed(123)
 
+chooseProblem <- function() {
+  filepath <- readline("Please enter the file path: ")
+  # Add any additional processing you need to do with the chosen file path
+
+  return(filepath)
+}
+
+
 # Load the training and test datasets
 train_data <- read.csv("ADCTL/ADCTLtrain.csv")
 test_data <- read.csv("ADCTL/ADCTLtest.csv")
@@ -22,14 +30,11 @@ preproc <- preProcess(train_data[, feature_vars], method = c("center", "scale"))
 train_data[, feature_vars] <- predict(preproc, train_data[, feature_vars])
 test_data[, feature_vars] <- predict(preproc, test_data[, feature_vars])
 
-# Use all features without feature selection
-# train_data_preproc_tmp <- train_data[, -c(1, ncol(train_data))]
-# selected_feature_vars <- names(train_data_preproc_tmp)
 
-# Logistic Regression
+# Logistic Regression tuning grid
 logi_grid <- expand.grid(parameter=c(0.001, 0.01, 0.1, 1,10,100, 1000))
 
-# Gradient Boosting Machine
+# Gradient Boosting Machine tuning grid
 gbm_grid <- expand.grid(
   interaction.depth = c(1, 3, 5, 9),
   n.trees = c(50, 100, 200),
@@ -37,22 +42,22 @@ gbm_grid <- expand.grid(
   n.minobsinnode = c(10, 20, 30)
 )
 
-# Naive Bayes
+# Naive Bayes tune grid
 nb_grid <- data.frame(laplace = seq(0.0, 1.0, length.out = 10), usekernel = c(TRUE, FALSE), adjust = c(TRUE, FALSE))
 
-# Decision Tree
+# Decision Tree tune grid
 dt_grid <- data.frame(cp = seq(0.001, 0.1, length.out = 10))
 
-# Random Forest
+# Random Forest tune grid
 rf_grid <- data.frame(mtry = seq(2, floor(sqrt(ncol(train_data))), by = 1))
 
-# Support Vector Machine
+# Support Vector Machine tune grid
 svm_grid <- data.frame(C = c(0.001, 0.01, 0.1, 1, 10, 100, 1000))
 
-# k-Nearest Neighbour
+# k-Nearest Neighbour tune grid
 knn_grid <- expand.grid(k = 1:10)
 
-# eXtreme Gradient Boosting Trees
+# eXtreme Gradient Boosting Trees tune grid
 xgb_grid <- expand.grid(
   nrounds = c(50, 100, 150),
   max_depth = c(3, 6, 9),
@@ -63,7 +68,7 @@ xgb_grid <- expand.grid(
   min_child_weight = c(1, 3, 5)
 )
 
-# Neural Network
+# Neural Network tune grid
 nnet_grid <- expand.grid(
   size = c(1:2),
   decay = c(0, 0.1, 0.01, 0.001)
@@ -82,11 +87,11 @@ feature_selection_methods <- list(
   principal_component_analysis = list(
     method = "pca",
     #vars = NULL,
-    thresh = 0.99
+    thresh = 0.98
   )
 )
 
-
+# Define the classifiers and their hyperparameters
 classifiers <- list(
   neural_network = list(
     method = "nnet",
@@ -128,18 +133,18 @@ classifiers <- list(
     family = "binomial",
     tune_grid = knn_grid,
     metric = "Accuracy"
+  ),
+  gradient_boosting_machine = list(
+    method = "gbm",
+    family = "binomial",
+    tune_grid = gbm_grid,
+    metric = "Accuracy"
+  ),
+  xgbtree = list(
+    method = "xgbTree",
+    tune_grid = xgb_grid,
+    metric = "Accuracy"
   )
-  # gradient_boosting_machine = list(
-  #   method = "gbm",
-  #   family = "binomial",
-  #   tune_grid = gbm_grid,
-  #   metric = "Accuracy"
-  # ),
-  # xgbtree = list(
-  #   method = "xgbTree",
-  #   tune_grid = xgb_grid,
-  #   metric = "Accuracy"
-  # )
 )
 
 # Define function for feature selection
@@ -149,33 +154,25 @@ featureSelection <- function(train_data, label_var, feature_selection_method) {
 
   if (feature_selection_method == "none") {
     selected_feature_vars <- feature_vars
+    return(selected_feature_vars)
   }
   else if (feature_selection_method == "pca") {
     pca_model <- preProcess(train_data[, feature_vars], method = feature_selection_methods$principal_component_analysis$method,
                             thresh = feature_selection_methods$principal_component_analysis$thresh)
     train_data_pca <- predict(pca_model, train_data[, feature_vars])
+    test_data_pca <- predict(pca_model, test_data[, feature_vars])
     #selected_feature_vars <- names(train_data_pca)
     selected_feature_vars <- train_data_pca
+    return(list(selected_feature_vars = selected_feature_vars, test_data_pca = test_data_pca))
   }
-  # else if (feature_selection_method == "pca") {
-  #   # Perform feature selection using PCA
-  #   pca_params <- feature_selection_methods$principal_component_analysis
-  #   pca_model <- FactoMineR::PCA(train_data[, feature_vars], scale.unit = TRUE, ncp = pca_params$n_components)
-  #
-  #   # Extract the principal components and preserve the original column names
-  #   train_data_pca <- data.frame(train_data[, label_var], pca_model$ind$coord)
-  #   colnames(train_data_pca)[2:(pca_params$n_components+1)] <- paste0("PC", 1:pca_params$n_components)
-  #
-  #   # Use the selected features
-  #   selected_feature_vars <- colnames(train_data_pca)[-1]
-  # }
   else {
     # Unsupported method
     stop(paste("Unsupported feature selection method:", feature_selection_method))
   }
 
   # Return the selected feature variables
-  return(selected_feature_vars)
+  #return(selected_feature_vars)
+  # return(list(selected_feature_vars = selected_feature_vars, test_data_pca = test_data_pca))
 }
 
 # Split the data into training and validation sets for cross-validation
@@ -188,13 +185,16 @@ for (classifier_name in names(classifiers)) {
          classifier_params <- classifiers[[classifier_name]]
          fs_params <- feature_selection_methods[[fs_name]]
 
-         # Perform feature selection
-         selected_features <- featureSelection(train_data[, feature_vars], train_data[, label_var], fs_params$method)
-         #selected_features_vars <- names(train_data)[selected_features]
-         selected_features_vars <- selected_features
+         # # Perform feature selection
+         # selected_features <- featureSelection(train_data[, feature_vars], train_data[, label_var], fs_params$method)
+         # #selected_features_vars <- names(train_data)[selected_features]
+         # selected_features_vars <- selected_features
 
 
          if(fs_name == "no_feature_selection") {
+           # Perform feature selection
+           selected_features <- featureSelection(train_data[, feature_vars], train_data[, label_var], fs_params$method)
+           selected_features_vars <- selected_features
            if (classifier_name == "logistic") {
              classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
                                        method = classifier_params$method,
@@ -218,53 +218,69 @@ for (classifier_name in names(classifiers)) {
                                  metric = classifier_params$metric)
            }
          }
-         else {
-             if (classifier_name == "logistic") {
-               classifier_model <- train(selected_features_vars, train_data[, label_var],
-                                         method = classifier_params$method,
-                                         family = classifier_params$family)
-               # Evaluate the performance on the training data using cross-validation
-               cv_results <- train(selected_features_vars, train_data[, label_var],
-                                   method = classifier_params$method,
-                                   family = classifier_params$family,
-                                   trControl = train_control,
-                                   tuneGrid = classifier_params$tune_grid,
-                                   metric = classifier_params$metric)
-             }
-             else {
-               classifier_model <- train(selected_features_vars, train_data[, label_var],
-                                         method = classifier_params$method)
-               # Evaluate the performance on the training data using cross-validation
-               cv_results <- train(selected_features_vars, train_data[, label_var],
-                                   method = classifier_params$method,
-                                   trControl = train_control,
-                                   tuneGrid = classifier_params$tune_grid,
-                                   metric = classifier_params$metric)
-             }
+         else if (fs_name == "principal_component_analysis") {
+           # Perform feature selection
+           selected_features <- featureSelection(train_data[, feature_vars], train_data[, label_var], fs_params$method)
+           selected_features_vars <- selected_features$selected_feature_vars
+           test_data_pca <- selected_features$test_data_pca
+           if (classifier_name == "logistic") {
+             classifier_model <- train(selected_features_vars, train_data[, label_var],
+                                       method = classifier_params$method,
+                                       family = classifier_params$family)
+             # Evaluate the performance on the training data using cross-validation
+             cv_results <- train(selected_features_vars, train_data[, label_var],
+                                 method = classifier_params$method,
+                                 family = classifier_params$family,
+                                 trControl = train_control,
+                                 tuneGrid = classifier_params$tune_grid,
+                                 metric = classifier_params$metric)
+           }
+           else {
+             classifier_model <- train(selected_features_vars, train_data[, label_var],
+                                       method = classifier_params$method)
+             # Evaluate the performance on the training data using cross-validation
+             cv_results <- train(selected_features_vars, train_data[, label_var],
+                                 method = classifier_params$method,
+                                 trControl = train_control,
+                                 tuneGrid = classifier_params$tune_grid,
+                                 metric = classifier_params$metric)
+           }
          }
-
 
          # Print the cross-validation results
          cat("\n", classifier_name, "with", fs_name, "feature selection (training):", "\n")
          print(cv_results$results)
 
          # Save the trained model
-         # model_name <- paste(classifier_name, fs_name, "model", sep = "_")
-         # save(classifier_model, file = paste(model_name, ".RData", sep = ""))
+         model_path <- "/ADCTL/models/"
+         model_name <- paste(model_path, classifier_name, fs_name, "model", sep = "_")
+         save(classifier_model, file = paste(model_name, ".RData", sep = ""))
 
 
          # Evaluate the performance on the test data
-         #test_predictions <- predict(classifier_model, newdata = test_data[, selected_features_vars])
+         # test_predictions <- predict(classifier_model, newdata = test_data[, selected_features_vars])
          # Predict probabilities on test data
-         #test_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type="prob")
-         predicted_labels <- predict(classifier_model, newdata = test_data[, selected_features_vars])
-         predicted_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type = "prob")
+         # test_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type="prob")
+
+         if (fs_name == "principal_component_analysis") {
+           #test_data_pca <- predict(pca_model, test_data[, feature_vars])
+           predicted_labels <- predict(classifier_model, newdata = test_data_pca)
+           predicted_probs <- predict(classifier_model, newdata = test_data_pca, type = "prob")
+         }
+         else {
+           predicted_labels <- predict(classifier_model, newdata = test_data[, selected_features_vars])
+           predicted_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type = "prob")
+         }
+
+         # Define the desired file path
+         output_path <- "/ADCTL/csv/"
 
          # Construct the output filename
-         output_filename <- paste0("50411_castrechini_", classifier_name, fs_name, "_ADCTLres.csv")
+         output_filename <- paste0(output_path,"50411_castrechini_", classifier_name, "_", fs_name, "_ADCTLres.csv")
 
          # Write the predictions to a CSV file
          write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_filename, row.names = FALSE)
+
 
          # auc <- pROC::roc(predictor = test_predictions, response = test_data[, label_var])$auc
          # mcc <- mltools::mcc(test_predictions, test_data[, label_var])$mcc
