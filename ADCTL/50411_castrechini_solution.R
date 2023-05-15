@@ -78,12 +78,12 @@ feature_selection_methods <- list(
   no_feature_selection = list(
     method = "none",
     vars = NULL
+  ),
+  principal_component_analysis = list(
+    method = "pca",
+    #vars = NULL,
+    thresh = 0.99
   )
-  # principal_component_analysis = list(
-  #   method = "pca",
-  #   #vars = NULL,
-  #   n_components = 10
-  # )
 )
 
 
@@ -128,18 +128,18 @@ classifiers <- list(
     family = "binomial",
     tune_grid = knn_grid,
     metric = "Accuracy"
-  ),
-  gradient_boosting_machine = list(
-    method = "gbm",
-    family = "binomial",
-    tune_grid = gbm_grid,
-    metric = "Accuracy"
-  ),
-  xgbtree = list(
-    method = "xgbTree",
-    tune_grid = xgb_grid,
-    metric = "Accuracy"
   )
+  # gradient_boosting_machine = list(
+  #   method = "gbm",
+  #   family = "binomial",
+  #   tune_grid = gbm_grid,
+  #   metric = "Accuracy"
+  # ),
+  # xgbtree = list(
+  #   method = "xgbTree",
+  #   tune_grid = xgb_grid,
+  #   metric = "Accuracy"
+  # )
 )
 
 # Define function for feature selection
@@ -150,14 +150,13 @@ featureSelection <- function(train_data, label_var, feature_selection_method) {
   if (feature_selection_method == "none") {
     selected_feature_vars <- feature_vars
   }
-  # else if (feature_selection_method == "pca") {
-  #   pca_model <- preProcess(train_data[, feature_vars], method = feature_selection_methods$principal_component_analysis$method,
-  #                           pcaComp = feature_selection_methods$principal_component_analysis$n_components,
-  #                           keep.all.variables = TRUE)
-  #   train_data_pca <- predict(pca_model, train_data[, feature_vars])
-  #   #selected_feature_vars <- names(train_data_pca)
-  #   selected_feature_vars <- train_data_pca
-  # }
+  else if (feature_selection_method == "pca") {
+    pca_model <- preProcess(train_data[, feature_vars], method = feature_selection_methods$principal_component_analysis$method,
+                            thresh = feature_selection_methods$principal_component_analysis$thresh)
+    train_data_pca <- predict(pca_model, train_data[, feature_vars])
+    #selected_feature_vars <- names(train_data_pca)
+    selected_feature_vars <- train_data_pca
+  }
   # else if (feature_selection_method == "pca") {
   #   # Perform feature selection using PCA
   #   pca_params <- feature_selection_methods$principal_component_analysis
@@ -194,30 +193,56 @@ for (classifier_name in names(classifiers)) {
          #selected_features_vars <- names(train_data)[selected_features]
          selected_features_vars <- selected_features
 
-         if (classifier_name == "logistic") {
-           classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
-                                     method = classifier_params$method,
-                                     family = classifier_params$family)
 
-           # Evaluate the performance on the training data using cross-validation
-           cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
-                               method = classifier_params$method,
-                               family = classifier_params$family,
-                               trControl = train_control,
-                               tuneGrid = classifier_params$tune_grid,
-                               metric = classifier_params$metric)
+         if(fs_name == "no_feature_selection") {
+           if (classifier_name == "logistic") {
+             classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
+                                       method = classifier_params$method,
+                                       family = classifier_params$family)
+             # Evaluate the performance on the training data using cross-validation
+             cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
+                                 method = classifier_params$method,
+                                 family = classifier_params$family,
+                                 trControl = train_control,
+                                 tuneGrid = classifier_params$tune_grid,
+                                 metric = classifier_params$metric)
+           }
+           else {
+             classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
+                                       method = classifier_params$method)
+             # Evaluate the performance on the training data using cross-validation
+             cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
+                                 method = classifier_params$method,
+                                 trControl = train_control,
+                                 tuneGrid = classifier_params$tune_grid,
+                                 metric = classifier_params$metric)
+           }
          }
          else {
-           classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
-                                     method = classifier_params$method)
-
-           # Evaluate the performance on the training data using cross-validation
-           cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
-                               method = classifier_params$method,
-                               trControl = train_control,
-                               tuneGrid = classifier_params$tune_grid,
-                               metric = classifier_params$metric)
+             if (classifier_name == "logistic") {
+               classifier_model <- train(selected_features_vars, train_data[, label_var],
+                                         method = classifier_params$method,
+                                         family = classifier_params$family)
+               # Evaluate the performance on the training data using cross-validation
+               cv_results <- train(selected_features_vars, train_data[, label_var],
+                                   method = classifier_params$method,
+                                   family = classifier_params$family,
+                                   trControl = train_control,
+                                   tuneGrid = classifier_params$tune_grid,
+                                   metric = classifier_params$metric)
+             }
+             else {
+               classifier_model <- train(selected_features_vars, train_data[, label_var],
+                                         method = classifier_params$method)
+               # Evaluate the performance on the training data using cross-validation
+               cv_results <- train(selected_features_vars, train_data[, label_var],
+                                   method = classifier_params$method,
+                                   trControl = train_control,
+                                   tuneGrid = classifier_params$tune_grid,
+                                   metric = classifier_params$metric)
+             }
          }
+
 
          # Print the cross-validation results
          cat("\n", classifier_name, "with", fs_name, "feature selection (training):", "\n")
