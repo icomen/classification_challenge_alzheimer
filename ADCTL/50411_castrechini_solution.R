@@ -18,7 +18,6 @@ chooseProblem <- function() {
 
   train_file <- paste0(problem_name, "/", problem_name, "train.csv")
   test_file <- paste0(problem_name, "/", problem_name, "test.csv")
-
   train_data <- read.csv(train_file)
   test_data <- read.csv(test_file)
 
@@ -98,7 +97,7 @@ feature_selection_methods <- list(
   principal_component_analysis = list(
     method = "pca",
     vars = NULL,
-    thresh = 0.97
+    thresh = 0.95
   )
   # lda_feature_selection = list(
   #   method = "lda",
@@ -143,12 +142,12 @@ classifiers <- list(
     tune_grid = knn_grid,
     metric = "Accuracy"
   ),
-  svm = list(
-    method = "svmLinear",
-    family = "binomial",
-    tune_grid = svm_grid,
-    metric = "Accuracy"
-  ),
+  # svm = list(
+  #   method = "svmLinear",
+  #   family = "binomial",
+  #   tune_grid = svm_grid,
+  #   metric = "Accuracy"
+  # ),
   gradient_boosting_machine = list(
     method = "gbm",
     family = "binomial",
@@ -174,13 +173,24 @@ featureSelection <- function(train_data, label_var, feature_selection_method) {
   else if (feature_selection_method == "pca") {
     pca_model <- preProcess(train_data[, feature_vars], method = feature_selection_methods$principal_component_analysis$method,
                             thresh = feature_selection_methods$principal_component_analysis$thresh)
-    train_data_pca <- predict(pca_model, train_data[, feature_vars])
-    test_data_pca <- predict(pca_model, test_data[, feature_vars])
-    #selected_feature_vars <- names(train_data_pca)
-    selected_feature_vars <- train_data_pca
-    return(list(selected_feature_vars = selected_feature_vars, test_data_pca = test_data_pca))
+    #train_data_pca <- predict(pca_model, train_data[, feature_vars])
+    #test_data_pca <- predict(pca_model, test_data[, feature_vars])
+    # Number of components
+    n_pcs <- pca_model$numComp
+    # Get the index of the most important feature on EACH component
+    most_important <- apply(abs(pca_model$rotation), 2, which.max)
+    # Initial feature names
+    initial_feature_names <- names(train_data[, feature_vars])
+    # Get the names of the most important features
+    most_important_names <- initial_feature_names[most_important]
+
+    # Create a dictionary of PC names and their corresponding important features
+    dic <- setNames(most_important_names, paste0("PC", 1:n_pcs))
+
+    selected_feature_vars <- most_important_names
+    return(selected_feature_vars)
   }
-  else if (feature_selection_method == "lda_feature_selection") {
+  else if (feature_selection_method == "lda") {
     # Perform LDA feature selection
     lda_model <- lda(train_data[, feature_vars], train_data[, label_var])
     train_data_lda <- as.data.frame(predict(lda_model)$x)
@@ -229,9 +239,9 @@ for (classifier_name in names(classifiers)) {
                                  tuneGrid = classifier_params$tune_grid,
                                  metric = classifier_params$metric)
              # Calculate AUC
-             predicted_probs_train <- predict(classifier_model, newdata = train_data[, selected_features_vars], type = "prob")[, 2]
+             predicted_probs_train <- predict(classifier_model, newdata = train_data[, selected_features_vars], type = "prob")[, 1]
              actual_labels <- train_data[, label_var]
-             auc <- pROC::roc(actual_labels, predicted_probs_train)$auc
+             auc <- pROC::auc(actual_labels, predicted_probs_train)
              # Calculate MCC
              predicted_classes_train <- predict(classifier_model, newdata = train_data[, selected_features_vars])
              mcc <- mltools::mcc(as.vector(actual_labels), as.vector(predicted_classes_train))
@@ -242,14 +252,14 @@ for (classifier_name in names(classifiers)) {
          else if (fs_name == "principal_component_analysis") {
            # Perform feature selection
            selected_features <- featureSelection(train_data[, feature_vars], train_data[, label_var], fs_params$method)
-           selected_features_vars <- selected_features$selected_feature_vars
-           test_data_pca <- selected_features$test_data_pca
+           selected_features_vars <- selected_features
+           #test_data_pca <- selected_features$test_data_pca
            if (classifier_name == "logistic") {
-             classifier_model <- train(selected_features_vars, train_data[, label_var],
+             classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
                                        method = classifier_params$method,
                                        family = classifier_params$family)
              # Evaluate the performance on the training data using cross-validation
-             cv_results <- train(selected_features_vars, train_data[, label_var],
+             cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
                                  method = classifier_params$method,
                                  family = classifier_params$family,
                                  trControl = train_control,
@@ -257,24 +267,24 @@ for (classifier_name in names(classifiers)) {
                                  metric = classifier_params$metric)
            }
            else {
-             classifier_model <- train(selected_features_vars, train_data[, label_var],
+             classifier_model <- train(train_data[, selected_features_vars], train_data[, label_var],
                                        method = classifier_params$method)
              # Evaluate the performance on the training data using cross-validation
-             cv_results <- train(selected_features_vars, train_data[, label_var],
+             cv_results <- train(train_data[, selected_features_vars], train_data[, label_var],
                                  method = classifier_params$method,
                                  trControl = train_control,
                                  tuneGrid = classifier_params$tune_grid,
                                  metric = classifier_params$metric)
              # Calculate AUC
-             predicted_probs_train <- predict(classifier_model, newdata = selected_features_vars, type = "prob")[, 2]
+             predicted_probs_train <- predict(classifier_model, newdata = train_data[, selected_features_vars], type = "prob")[, 1]
              actual_labels <- train_data[, label_var]
-             auc <- pROC::roc(actual_labels, predicted_probs_train)$auc
+             auc <- pROC::auc(actual_labels, predicted_probs_train)
              # Calculate MCC
-             predicted_classes_train <- predict(classifier_model, newdata = selected_features_vars)
+             predicted_classes_train <- predict(classifier_model, newdata = train_data[, selected_features_vars])
              mcc <- mltools::mcc(as.vector(actual_labels), as.vector(predicted_classes_train))
            }
-           predicted_labels <- predict(classifier_model, newdata = test_data_pca)
-           predicted_probs <- predict(classifier_model, newdata = test_data_pca, type = "prob")
+           predicted_labels <- predict(classifier_model, newdata = test_data[, selected_features_vars])
+           predicted_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type = "prob")
          }
          # else if (fs_name == "lda_feature_selection") {
          #   # Perform feature selection
@@ -340,7 +350,7 @@ for (classifier_name in names(classifiers)) {
          output_filename <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_ADCTLres.csv")
 
          # Write the predictions to a CSV file
-         write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_filename, row.names = FALSE)
+         #write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_filename, row.names = FALSE)
 
        }
 }
