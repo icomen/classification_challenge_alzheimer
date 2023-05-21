@@ -299,7 +299,7 @@ for (classifier_name in names(classifiers)) {
 
 
          model_name <- paste(classifier_name, fs_name, "model", sep = "_")
-         #save(classifier_model, file = paste0(model_name, ".RData"))
+         # save(classifier_model, file = paste0(model_name, ".RData"))
 
          # Construct the output filename
          output_res <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_", data$problem_name, "res.csv")
@@ -307,8 +307,8 @@ for (classifier_name in names(classifiers)) {
          output_feat <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_", data$problem_name, "feat.csv")
 
          # Write the predictions to a CSV file
-         write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_res, row.names = FALSE)
-         write.csv(train_data[, selected_features_vars], output_feat, row.names = FALSE)
+         # write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_res, row.names = FALSE)
+         # write.csv(train_data[, selected_features_vars], output_feat, row.names = FALSE)
 
        }
 }
