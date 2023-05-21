@@ -271,6 +271,8 @@ for (classifier_name in names(classifiers)) {
 
          # Calculate MCC
          mcc <- mltools::mcc(as.vector(actual_labels), as.vector(predicted_classes_train))
+         accuracy <- (true_positives + true_negatives) / sum(confusion_matrix)
+
 
          predicted_labels <- predict(classifier_model, newdata = test_data[, selected_features_vars])
          predicted_probs <- predict(classifier_model, newdata = test_data[, selected_features_vars], type = "prob")
@@ -279,6 +281,7 @@ for (classifier_name in names(classifiers)) {
          # Print the cross-validation results
          cat("\n", classifier_name, "with", fs_name, "feature selection (training):", "\n")
          # Add other metrics columns to cv_results$results
+         cv_results$results$Acc <- accuracy
          cv_results$results$Sens <- sensitivity
          cv_results$results$Spec <- specificity
          cv_results$results$Prec <- precision
@@ -292,16 +295,16 @@ for (classifier_name in names(classifiers)) {
 
          # Write the cross-validation results to a text file
          file_name <- "cv_results.txt"  # Specify the file name and path as needed
-         #write.table(cv_results$results, file = file_name, append = TRUE, sep = "\t")
+         # write.table(cv_results$results, file = file_name, append = TRUE, sep = "\t")
 
 
          model_name <- paste(classifier_name, fs_name, "model", sep = "_")
          #save(classifier_model, file = paste0(model_name, ".RData"))
 
          # Construct the output filename
-         output_res <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_ADCTLres.csv")
+         output_res <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_", data$problem_name, "res.csv")
 
-         output_feat <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_ADCTLfeat.csv")
+         output_feat <- paste0("50411_castrechini_", classifier_name, "_", fs_name, "_", data$problem_name, "feat.csv")
 
          # Write the predictions to a CSV file
          write.csv(cbind(test_data$ID, predicted_labels, predicted_probs), output_res, row.names = FALSE)
