@@ -34,9 +34,37 @@ test_data <- data$test_data
 label_var_predicted <- names(predicted_data)[2]
 label_var_test <- names((test_data)[ncol(test_data)])
 
-actual_labels <- predicted_data[, label_var_predicted]
+predicted_label <- predicted_data[, label_var_predicted]
 original_labels <- test_data[, label_var_test]
 
-mcc <- mltools::mcc(as.vector(actual_labels), as.vector(original_labels))
-auc <- pROC::roc(as.vector(actual_labels), as.vector(original_labels))$auc
 
+if(data$problem_name == "ADCTL") {
+  predicted_label <- ifelse(predicted_label == "AD", 1, 0)
+  original_labels <- ifelse(original_labels == "CTL", 0, 1)
+} else if (data$problem_name == "ADMCI"){
+  predicted_label <- ifelse(predicted_label == "AD", 1, 0)
+  original_labels <- ifelse(original_labels == "MCI", 0, 1)
+} else {
+  predicted_label <- ifelse(predicted_label == "MCI", 1, 0)
+  original_labels <- ifelse(original_labels == "CTL", 0, 1)
+}
+
+
+accuracy <- sum(predicted_label == original_labels) / length(predicted_label)
+
+
+true_positives <- sum(predicted_label == 1 & original_labels == 1)
+false_negatives <- sum(predicted_label == 1 & original_labels == 0)
+true_negatives <- sum(predicted_label == 0 & original_labels == 0)
+false_positives <- sum(predicted_label == 0 & original_labels == 1)
+
+sensitivity <- true_positives / (true_positives + false_negatives)
+specificity <- true_negatives / (true_negatives + false_positives)
+
+mcc <- mltools::mcc(as.vector(predicted_label), as.vector(original_labels))
+auc <- roc(predicted_label, original_labels)$auc
+
+
+precision <- true_positives / (true_positives + false_positives)
+f1_score <- 2 * (precision * sensitivity) / (precision + sensitivity)
+balanced_accuracy <- (sensitivity + specificity) / 2
