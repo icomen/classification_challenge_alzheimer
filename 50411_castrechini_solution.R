@@ -205,8 +205,44 @@ featureSelection <- function(train_data, label_var, feature_selection_method) {
     }
 }
 
+# customSummary <- function(data, lev = NULL, model = NULL) {
+#   # Calculate metrics
+#   confusion_matrix <- table(data$obs, data$pred)
+#   true_positives <- confusion_matrix[2, 2]
+#   false_negatives <- confusion_matrix[2, 1]
+#   true_negatives <- confusion_matrix[1, 1]
+#   false_positives <- confusion_matrix[1, 2]
+#
+#   sensitivity <- true_positives / (true_positives + false_negatives)
+#   specificity <- true_negatives / (true_negatives + false_positives)
+#
+#   precision <- true_positives / (true_positives + false_positives)
+#   f1_score <- 2 * (precision * sensitivity) / (precision + sensitivity)
+#   balanced_accuracy <- (sensitivity + specificity) / 2
+#
+#   # Calculate AUC
+#   predicted_probs <- predict(model, newdata = data, type = "prob")
+#   auc <- pROC::auc(data$obs, predicted_probs)
+#
+#   # Calculate MCC
+#   mcc <- mltools::mcc(data$obs, data$pred)
+#
+#   # Calculate accuracy
+#   accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+#
+#   # Return metrics
+#   out <- c(AUC = auc, Accuracy = accuracy, Sensitivity = sensitivity,
+#            Specificity = specificity, Precision = precision,
+#            F1_Score = f1_score, Balanced_Accuracy = balanced_accuracy,
+#            MCC = mcc)
+#   names(out) <- c("AUC", "Accuracy", "Sensitivity", "Specificity",
+#                   "Precision", "F1_Score", "Balanced_Accuracy", "MCC")
+#   out
+# }
+
 # Split the data into training and validation sets for cross-validation
 train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE)
+#train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = customSummary)
 
 # Perform binary classification and feature selection for each classifier and feature selection method
 for (classifier_name in names(classifiers)) {
